@@ -53,11 +53,10 @@ class TFRecordDataset(torch.utils.data.IterableDataset):
         self.description = description
         self.shuffle_queue_size = shuffle_queue_size
         self.transform = transform or (lambda x: x)
+        self.nr_samples = None
         if self.index_path is not None:
             with open(self.index_path, 'r') as fin:
-                self.num_samples = sum(1 for _ in fin)
-        else:
-            self.nr_samples = None
+                self.nr_samples = sum(1 for _ in fin)
 
     def __len__(self):
         if self.nr_samples is not None:
