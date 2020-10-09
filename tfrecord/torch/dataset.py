@@ -132,3 +132,75 @@ class MultiTFRecordDataset(torch.utils.data.IterableDataset):
         if self.transform:
             it = map(self.transform, it)
         return it
+
+
+class TFRecordDatasetWithLen(torch.utils.data.IterableDataset):
+    """Parse (generic) TFRecords dataset into `IterableDataset` object,
+    which contain `np.ndarrays`s.
+
+    Params:
+    -------
+    data_path: str
+        The path to the tfrecords file.
+
+    index_path: str or None
+        The path to the index file.
+
+    description: list or dict of str, optional, default=None
+        List of keys or dict of (key, value) pairs to extract from each
+        record. The keys represent the name of the features and the
+        values ("byte", "float", or "int") correspond to the data type.
+        If dtypes are provided, then they are verified against the
+        inferred type for compatibility purposes. If None (default),
+        then all features contained in the file are extracted.
+
+    shuffle_queue_size: int, optional, default=None
+        Length of buffer. Determines how many records are queued to
+        sample from.
+
+    transform : a callable, default = None
+        A function that takes in the input `features` i.e the dict
+        provided in the description, transforms it and returns a
+        desirable output.
+
+    """
+
+    def __init__(self,
+                 data_path: str,
+                 index_path: typing.Union[str, None],
+                 description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
+                 shuffle_queue_size: typing.Optional[int] = None,
+                 transform: typing.Callable[[dict], typing.Any] = None
+                 ) -> None:
+        super(TFRecordDatasetWithLen, self).__init__()
+        self.data_path = data_path
+        self.index_path = index_path
+        self.description = description
+        self.shuffle_queue_size = shuffle_queue_size
+        self.transform = transform or (lambda x: x)
+        if self.index_path is not None:
+            with open(self.index_path, 'r') as fin:
+                self.num_samples = sum(1 for _ in fin)
+        else:
+            self.nr_samples = None
+
+    def __len__(self):
+        if self.nr_samples is not None:
+            return self.nr_samples
+        else:
+            raise NotImplementedError()
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is not None:
+            shard = worker_info.id, worker_info.num_workers
+            np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
+        else:
+            shard = None
+        it = reader.tfrecord_loader(
+            self.data_path, self.index_path, self.description, shard)
+        if self.shuffle_queue_size:
+            it = iterator_utils.shuffle_iterator(it, self.shuffle_queue_size)
+        if self.transform:
+            it = map(self.transform, it)
+        return it
