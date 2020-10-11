@@ -142,3 +142,82 @@ class MultiTFRecordDataset(torch.utils.data.IterableDataset):
         if self.transform:
             it = map(self.transform, it)
         return it
+
+
+# TODO
+class RandomAccessMultiTFRecordDataset(torch.utils.data.IterableDataset):
+    """Parse multiple (generic) TFRecords datasets into an `IterableDataset`
+    object, which contain `np.ndarrays`s.
+
+    Params:
+    -------
+    data_pattern: str
+        Input data path pattern.
+
+    index_pattern: str or None
+        Input index path pattern.
+
+    splits: dict
+        Dictionary of (key, value) pairs, where the key is used to
+        construct the data and index path(s) and the value determines
+        the contribution of each split to the batch.
+
+    description: list or dict of str, optional, default=None
+        List of keys or dict of (key, value) pairs to extract from each
+        record. The keys represent the name of the features and the
+        values ("byte", "float", or "int") correspond to the data type.
+        If dtypes are provided, then they are verified against the
+        inferred type for compatibility purposes. If None (default),
+        then all features contained in the file are extracted.
+
+    shuffle_queue_size: int, optional, default=None
+        Length of buffer. Determines how many records are queued to
+        sample from.
+
+    transform : a callable, default = None
+        A function that takes in the input `features` i.e the dict
+        provided in the description, transforms it and returns a
+        desirable output.
+
+    """
+
+    def __init__(self,
+                 data_pattern: str,
+                 index_pattern: typing.Union[str, None],
+                 splits: typing.Dict[str, float],
+                 description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
+                 shuffle_queue_size: typing.Optional[int] = None,
+                 transform: typing.Callable[[dict], typing.Any] = None) -> None:
+        super(RandomAccessMultiTFRecordDataset, self).__init__()
+        self.data_pattern = data_pattern
+        self.index_pattern = index_pattern
+        self.splits = splits
+        self.description = description
+        self.shuffle_queue_size = shuffle_queue_size
+        self.transform = transform
+
+        if self.index_pattern is not None:
+            self.num_samples = sum(
+                sum(1 for _ in open(self.index_pattern.format(split)))
+                for split in self.splits
+            )
+        else:
+            self.num_samples = None
+
+    def __len__(self):
+        if self.num_samples is not None:
+            return self.num_samples
+        else:
+            raise NotImplementedError()
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is not None:
+            np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
+        it = reader.multi_tfrecord_loader(
+            self.data_pattern, self.index_pattern, self.splits, self.description)
+        if self.shuffle_queue_size:
+            it = iterator_utils.shuffle_iterator(it, self.shuffle_queue_size)
+        if self.transform:
+            it = map(self.transform, it)
+        return it
