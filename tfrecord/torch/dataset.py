@@ -212,10 +212,12 @@ class RandomAccessMultiTFRecordDataset(torch.utils.data.IterableDataset):
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
+        shard = None
         if worker_info is not None:
+            shard = worker_info.id, worker_info.num_workers
             np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
         it = reader.multi_tfrecord_loader(
-            self.data_pattern, self.index_pattern, self.splits, self.description)
+            self.data_pattern, self.index_pattern, self.splits, self.description, shard)
         if self.shuffle_queue_size:
             it = iterator_utils.shuffle_iterator(it, self.shuffle_queue_size)
         if self.transform:
