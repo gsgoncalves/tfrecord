@@ -215,7 +215,6 @@ class RandomAccessMultiTFRecordDataset(torch.utils.data.IterableDataset):
         shard = None
         if worker_info is not None:
             shard = worker_info.id, worker_info.num_workers
-            print("Shard: ", shard)
             np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
         it = reader.multi_tfrecord_loader(
             self.data_pattern, self.index_pattern, self.splits, self.description, shard)
